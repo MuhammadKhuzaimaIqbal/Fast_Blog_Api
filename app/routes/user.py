@@ -7,6 +7,7 @@ from app.models.user import User, UserRole
 from app.security import get_current_user
 from app.security import create_access_token
 from app.schemas.user import UserCreate, UserResponse,UserLogin
+from app.routes.ws import broadcast_to_admins
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -31,6 +32,9 @@ async def register_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+
+    # Notify admins only
+    await broadcast_to_admins(f"New user registered: {new_user.email}")
 
     return new_user
 
