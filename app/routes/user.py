@@ -7,7 +7,7 @@ from app.models.user import User, UserRole
 from app.security import get_current_user
 from app.security import create_access_token
 from app.schemas.user import UserCreate, UserResponse,UserLogin
-from app.routes.ws import broadcast_to_admins
+from app.routes.ws import broadcast_to_admins,disconnect_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -48,6 +48,9 @@ async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
     if not db_user or db_user.password != user.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if db_user.is_blocked:
+        raise HTTPException(status_code=403, detail="User is blocked")
+
     # Automatically include role in response (user/admin)
     token = create_access_token({"sub": db_user.email, "role": db_user.role.value})
 
@@ -66,3 +69,26 @@ async def delete_all_users(
     await db.execute(delete(User).where(User.role != UserRole.admin))
     await db.commit()
     return { "detail": "All non-admin users deleted successfully"}
+
+
+@router.post("/block/{user_id}")
+async def block_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user_to_block = result.scalar_one_or_none()
+
+    if not user_to_block:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_to_block.is_blocked = True
+
+    await db.commit()
+    await disconnect_user(user_to_block.email)
+
+    return {"message": "User blocked successfully"}

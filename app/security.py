@@ -37,6 +37,9 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
 
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="User is blocked")
+
     return user
 
 def decode_access_token(token: str):
