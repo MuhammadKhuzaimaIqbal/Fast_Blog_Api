@@ -14,6 +14,10 @@ SECRET_KEY = "khuzaima"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
+async def is_token_blacklisted(token: str, db: AsyncSession):
+    result = await db.execute(select(BlacklistedToken).where(BlacklistedToken.token == token))
+    return result.scalar_one_or_none() is not None
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -25,6 +29,10 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     token = credentials.credentials  # the actual JWT token
+    # Check blacklist
+    if await is_token_blacklisted(token, db):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")

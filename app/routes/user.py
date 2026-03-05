@@ -92,3 +92,23 @@ async def block_user(
     await disconnect_user(user_to_block.email)
 
     return {"message": "User blocked successfully"}
+
+# routes/user.py
+@router.post("/revoke-token", status_code=200)
+async def revoke_token(token: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Only admin can revoke
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Only admin can revoke tokens")
+
+    from app.models.token import BlacklistedToken
+    new_entry = BlacklistedToken(token=token)
+    db.add(new_entry)
+    await db.commit()
+
+    # Disconnect WebSocket if this token is active
+    to_remove = [c for c in connected_clients if c.get("token") == token]
+    for c in to_remove:
+        await c["ws"].close(code=1008)
+        connected_clients.remove(c)
+
+    return {"detail": "Token revoked successfully"}

@@ -2,16 +2,39 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPExcept
 from typing import List
 from app.security import decode_access_token
 
+import asyncio
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import get_db
 from app.models.user import User
+from app.models.token import BlacklistedToken
 from fastapi import Depends
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 # Store connected clients with roles
 connected_clients: List[dict] = []  # [{"ws": websocket, "role": "admin"}, ...]
+
+async def monitor_revoked_tokens(db: AsyncSession):
+    """Background task to disconnect clients whose token got revoked"""
+    while True:
+        to_disconnect = []
+        for client in connected_clients:
+            result = await db.execute(
+                select(BlacklistedToken).where(BlacklistedToken.token == client.get("token"))
+            )
+            if result.scalar_one_or_none():
+                to_disconnect.append(client)
+
+        for client in to_disconnect:
+            try:
+                await client["ws"].close(code=1008)
+            except:
+                pass
+            connected_clients.remove(client)
+
+        await asyncio.sleep(2)  # check every 2 seconds
 
 async def broadcast_to_admins(message: str):
     """Send message only to admin clients"""
@@ -27,9 +50,12 @@ async def disconnect_user(email: str):
 @router.websocket("/notifications")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...),db: AsyncSession= Depends(get_db)
 ):
-    """
-    Connect with JWT token as query param: /ws/notifications?token=JWT_TOKEN
-    """
+    # Check if token is blacklisted
+    result = await db.execute(select(BlacklistedToken).where(BlacklistedToken.token == token))
+    if result.scalar_one_or_none():
+        await websocket.close(code=1008)
+        return
+    
     try:
         payload = decode_access_token(token)
         role = payload.get("role")
@@ -51,12 +77,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...),db: A
             await websocket.close(code=1008)
             return
 
+        # Before accepting WebSocket
+        result = await db.execute(select(BlacklistedToken).where(BlacklistedToken.token == token))
+        if result.scalar_one_or_none():
+            await websocket.close(code=1008)  # token revoked
+            return
+
     except HTTPException:
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
-    connected_clients.append({"ws": websocket, "role": role,"email":email})
+    connected_clients.append({"ws": websocket, "role": role,"email":email,"token": token})
 
     try:
         while True:
