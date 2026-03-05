@@ -7,6 +7,7 @@ from app.config import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
+from app.models.token import BlacklistedToken
 
 bearer_scheme = HTTPBearer()
 

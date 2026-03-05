@@ -8,6 +8,7 @@ from app.security import get_current_user
 from app.security import create_access_token
 from app.schemas.user import UserCreate, UserResponse,UserLogin
 from app.routes.ws import broadcast_to_admins,disconnect_user
+from app .routes.ws import connected_clients
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
