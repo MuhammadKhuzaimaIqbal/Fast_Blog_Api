@@ -1,12 +1,12 @@
 from pydantic import BaseModel, EmailStr,ConfigDict
 from typing import Optional
-from app.models.user import UserRole  # import your enum here
+from app.models.user import UserRole  
 
 class UserCreate(BaseModel):
     name: Optional[str] 
-    email: EmailStr     # validates email format
+    email: EmailStr     
     password: str
-    role: Optional[UserRole] = UserRole.user  # optional in request, defaults to user
+    role: Optional[UserRole] = UserRole.user  
 
 class UserResponse(BaseModel):
     id : int
@@ -14,7 +14,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: UserRole
 
-    model_config = ConfigDict(from_attributes=True)  # allows SQLAlchemy model objects to be converted automatically
+    model_config = ConfigDict(from_attributes=True)
 
 class UserLogin(BaseModel):
     email: EmailStr

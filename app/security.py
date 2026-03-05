@@ -29,8 +29,8 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
-    token = credentials.credentials  # the actual JWT token
-    # Check blacklist
+    token = credentials.credentials  
+
     if await is_token_blacklisted(token, db):
         raise HTTPException(status_code=401, detail="Token has been revoked")
 
